@@ -1,0 +1,209 @@
+#!/bin/bash
+alias belong='cd ~/Documents/Sites/Belong/styleguide'
+alias belongui='cd ~/Documents/Sites/belongui'
+
+#HELPERS
+alias bashup=". ~/.bash_profile"
+alias bashopen='open -a "Sublime Text" ~/.bash_profile'
+alias ips="ifconfig -a | perl -nle'/(\d+\.\d+\.\d+\.\d+)/ && print $1'"
+
+#LIFX
+alias 1='echo -e "$(cat ~/developer/lifx/allOn.echo)" > /dev/udp/10.0.0.8/56700'
+alias 10='echo -e "$(cat ~/developer/lifx/allOff.echo)" > /dev/udp/10.0.0.8/56700'
+alias 2='echo -e "$(cat ~/developer/lifx/allOn.echo)" > /dev/udp/10.0.0.9/56700'
+alias 20='echo -e "$(cat ~/developer/lifx/allOff.echo)" > /dev/udp/10.0.0.9/56700'
+alias 3='echo -e "$(cat ~/developer/lifx/allOn.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/allOn.echo)" > /dev/udp/10.0.0.9/56700'
+alias 30='echo -e "$(cat ~/developer/lifx/allOff.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/allOff.echo)" > /dev/udp/10.0.0.9/56700'
+alias green='echo -e "$(cat ~/developer/lifx/allGreen.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/allGreen.echo)" > /dev/udp/10.0.0.9/56700'
+alias red='echo -e "$(cat ~/developer/lifx/allRed.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/allRed.echo)" > /dev/udp/10.0.0.9/56700'
+alias blue='echo -e "$(cat ~/developer/lifx/allBlue.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/allBlue.echo)" > /dev/udp/10.0.0.9/56700'
+alias white='echo -e "$(cat ~/developer/lifx/allWhite.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/allWhite.echo)" > /dev/udp/10.0.0.9/56700'
+
+function lifx {
+	# add header
+	PACKET="\x31\x00\x00\x34\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x66\x00\x00\x00\\"
+	#add reserved space
+	PACKET+="x00\\"
+
+	#Convert HEX to RGB
+	HEX_CLR=$1
+	RED=$(echo $(( 16#${HEX_CLR:0:2} )))
+	GREEN=$(echo $(( 16#${HEX_CLR:2:2} )))
+	BLUE=$(echo $(( 16#${HEX_CLR:4:2} )))
+	echo R:$RED G:$GREEN B:$BLUE
+
+	# RED=$(bc <<<"scale=3;$RED/255")
+	# GREEN=$(bc <<<"scale=3;$GREEN/255")
+	# BLUE=$(bc <<<"scale=3;$BLUE/255")
+	# echo R:$RED G:$GREEN B:$BLUE
+
+	# Get max and min of RGB values
+	ar=($RED $GREEN $BLUE)
+	max=${ar[0]}
+	min=${ar[0]}
+	for n in "${ar[@]}" ; do
+		(( $(echo "$n > $max" |bc -l) )) && max=$n
+		(( $(echo "$n < $min" |bc -l) )) && min=$n
+	done
+	echo Max:$max Min:$min
+
+	#Calc BRIGHTNESS
+	BRIGHTNESS=$(bc <<<"scale=3;$max/255")
+	#Calc SATURATION
+	DELTA=$(expr $max-$min | bc )
+	if [ $(( $DELTA == 0 )) ]; then
+		SATURATION="0"
+	else
+		SATURATION=$(bc <<<"scale=3;$DELTA/$max")
+	fi
+
+	#Calc color values
+	DELTA=$(expr $max-$min | bc )
+
+	RED_C=$(expr $max-$RED | bc )
+	RED_C=$(bc <<<"scale=3;$RED_C/$DELTA")
+	GREEN_C=$(expr $max-$GREEN | bc )
+	GREEN_C=$(bc <<<"scale=3;$GREEN_C/$DELTA")
+	BLUE_C=$(expr $max-$BLUE | bc )
+	BLUE_C=$(bc <<<"scale=3;$BLUE_C/$DELTA")
+
+	#Calc HUE
+	case $max in
+		$RED)
+			HUE=$(expr $BLUE_C-$GREEN_C | bc )
+			;;
+		$GREEN)
+			HUE=$(expr $RED_C-$BLUE_C | bc )
+			HUE=$(expr $HUE+2 | bc )
+			;;
+		$BLUE)
+			HUE=$(expr $GREEN_C-$RED_C | bc )
+			HUE=$(expr $HUE+4 | bc )
+			;;
+	esac
+	HUE=$(bc <<<"scale=3;$HUE/6")
+
+	echo H:$HUE S:$SATURATION B:$BRIGHTNESS
+
+
+#=================== CONVERT RGB TO HSL START ========================
+
+	# HUE=$(expr $max+$min | bc )
+	# #HUE=$(( $(echo "$max + $min" |bc -l) ))
+	# HUE=$(bc <<<"scale=3;$HUE/2")
+	# SATURATION=$HUE
+	# LIGHT=$HUE
+
+	# if [ $max == $min ]; then
+	# 	HUE=0
+	# 	SATURATION=0
+	# else
+	# 	DELTA=$(expr $max-$min | bc )
+	# 	if [ $(echo "$LIGHT < 0.5" |bc -l) ]; then
+	# 		VAL=$(expr 2-$max-$min | bc )
+	# 		SATURATION=$(bc <<<"scale=3;$DELTA/$VAL")
+	# 	else
+	# 		VAL=$(expr $max+$min | bc )
+	# 		SATURATION=$(bc <<<"scale=3;$DELTA/$VAL")
+	# 	fi
+	# 	case $max in
+	# 		$RED)
+	# 			HUE=$(expr $GREEN-$BLUE | bc )
+	# 			HUE=$(bc <<<"scale=3;$HUE/$DELTA")
+	# 			if [ $GREEN < $BLUE ]; then
+	# 				HUE=$(expr $HUE+6 | bc )
+	# 			fi
+	# 			;;
+	# 		$GREEN)
+	# 			HUE=$(expr $BLUE-$RED | bc )
+	# 			HUE=$(bc <<<"scale=3;$HUE/$DELTA")
+	# 			HUE=$(expr $HUE+2 | bc )
+	# 			;;
+	# 		$BLUE)
+	# 			HUE=$(expr $RED-$GREEN | bc )
+	# 			HUE=$(bc <<<"scale=3;$HUE/$DELTA")
+	# 			HUE=$(expr $HUE+4 | bc )
+	# 			;;
+	# 	esac
+	# 	HUE=$(bc <<<"scale=3;$HUE/6")
+	# fi
+
+	# echo H:$HUE S:$SATURATION L:$LIGHT
+
+	#=================== CONVERT RGB TO HSL END ========================
+
+	HUE=$(expr $HUE*65535 | bc ) #Multiply by maximum int value
+	SATURATION=$(expr $SATURATION*65535 | bc ) #Multiply by maximum int value
+	BRIGHTNESS=$(expr $BRIGHTNESS*65535 | bc ) #Multiply by maximum int value
+
+	HEX_HUE=$(echo $HUE | xargs printf "%.*f\n" 0) #Round to nearest int
+	HEX_SATURATION=$(echo $SATURATION | xargs printf "%.*f\n" 0) #Round to nearest int
+	HEX_BRIGHTNESS=$(echo $BRIGHTNESS | xargs printf "%.*f\n" 0) #Round to nearest int
+
+	echo H:$HEX_HUE S:$HEX_SATURATION B:$HEX_BRIGHTNESS
+
+	HEX_HUE=$(echo "obase=16; ${HEX_HUE}" | bc) #Convert int to hex
+	HEX_SATURATION=$(echo "obase=16; ${HEX_SATURATION}" | bc) #Convert int to hex
+	HEX_BRIGHTNESS=$(echo "obase=16; ${HEX_BRIGHTNESS}" | bc) #Convert int to hex
+
+	echo H:$HEX_HUE S:$HEX_SATURATION B:$HEX_BRIGHTNESS
+
+	# if [ $(( ${#HEX_SATURATION} < 3 )) ]; then #Add on extra 0 if the hex is less than 5 chars
+	# 	HEX_SATURATION+='0'
+	# fi
+	# if [ $(( ${#HEX_BRIGHTNESS} < 3 )) ]; then #Add on extra 0 if the hex is less than 5 chars
+	# 	HEX_BRIGHTNESS+='0'
+	# fi
+
+	# #add hue value
+	PACKET+=x${HEX_HUE:0:2}\\x${HEX_HUE:2:2}\\
+
+	# #add saturation value
+	PACKET+=x${HEX_SATURATION:0:2}\\x${HEX_SATURATION:2:2}\\
+	# PACKET+="xFF\xFF\\"
+
+	# #add brightness value
+	PACKET+=x${HEX_BRIGHTNESS:0:2}\\x${HEX_BRIGHTNESS:2:2}\\
+
+	# #add hex color code
+	# PACKET+=x${HEX_CLR:0:2}\\x${HEX_CLR:2:2}\\x${HEX_CLR:4:2}\\
+	# #add full saturation
+	# PACKET+="xFF\xFF\\"
+	# #calculate brightness
+	# BRT=$(expr $2*0.01 | bc ) #Normalise brightness value
+	# BRT=$(expr $BRT*65535 | bc ) #Multiply by maximum int value
+	# HEXBRT=$(echo $BRT | xargs printf "%.*f\n" 0) #Round to nearest int
+	# HEXBRT=$(echo "obase=16; ${HEXBRT}" | bc) #Convert int to hex
+	# if [ $(( ${#HEXBRT} < 4 )) ]; then #Add on extra 0 if the hex is less than 4 chars
+	# 	HEXBRT+='0'
+	# fi
+	# #add brightness value
+	# PACKET+=x${HEXBRT:0:2}\\x${HEXBRT:2:2}\\
+
+
+	#add rest of standard payload
+	PACKET+="xAC\x0D\x00\x04\x00\x00"
+
+	# create PACKET file
+	today=`date +%Y-%m-%d.%H:%M:%S`
+	echo $PACKET >> ~/developer/lifx/temp/$today.echo
+
+	if [ -z "$3" ]; then
+		#Send to all lights
+		echo -e "$(cat ~/developer/lifx/temp/$today.echo)" > /dev/udp/10.0.0.8/56700; echo -e "$(cat ~/developer/lifx/temp/$today.echo)" > /dev/udp/10.0.0.9/56700
+	elif [ ]; then
+		#Send to individual lights
+		case $3 in
+			1)
+				echo -e "$(cat ~/developer/lifx/$today.echo)" > /dev/udp/10.0.0.8/56700
+				;;
+			2)
+				echo -e "$(cat ~/developer/lifx/$today.echo)" > /dev/udp/10.0.0.9/56700
+				;;
+			*) echo "Hmm... sending to all lights anyway"
+				;;
+		esac
+	fi
+}
+
+alias lifxc='rm -r ~/developer/lifx/temp/*'
